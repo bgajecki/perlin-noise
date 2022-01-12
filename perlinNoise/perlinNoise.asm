@@ -5,9 +5,6 @@
 ;
 ONE = 1
 
-input dq 4.7, 7.4
-result dq 0
-
 ; Code segment
 .code
 
@@ -64,19 +61,20 @@ ENDM
 ; /description Generate Perlin Noise.
 ; /param RAX - pointer to structure
 ; /return Noise.
-; /use XMM3[0..127] - vector
-; /use XMM4[0..127] - floor vector
-; /use XMM5[0..127] - cell vector
-; /use XMM6[0..127] - difference vector
-; /use XMM7[0..127] - mix vector
+; /use XMM3[0..127] - Vector
+; /use XMM4[0..127] - Floor vector
+; /use XMM5[0..127] - Cell vector
+; /use XMM6[0..127] - Difference vector
+; /use XMM7[0..127] - Mix vector
 ; /use XMM8[0..127] - Gradient vector
-; /use XMM8[0..127] - Interpolation vector
+; /use XMM9[0..127] - Interpolation vector
 perlinNoise PROC
- push rbp ; save frame pointer
- mov rbp, rsp ; fix stack pointer
- sub rsp, 8 * (4 + 2)
- lea rax, input
-	movupd xmm3, [rax]
+	; x -> xmm3[0...63]
+	; y -> xmm3[64...127]
+	movupd xmm3, xmm0
+	movlhps xmm3, xmm1
+
+	; Calc floor of vector
 	movupd xmm4, xmm3
 	cvtsd2si rax, xmm4
 	movhlps xmm4, xmm4
@@ -86,6 +84,7 @@ perlinNoise PROC
 	movlhps xmm4, xmm4
 	cvtsi2sd xmm4, rax
 
+	; Calc cell of vector
 	add rdx, ONE
 	add rax, ONE
 
@@ -93,48 +92,45 @@ perlinNoise PROC
 	movlhps xmm5, xmm5
 	cvtsi2sd xmm5, rax
 
+	; Calc differents beetwen floor and vector
 	movupd xmm6, xmm3
 	subpd xmm6, xmm4
 
 	movupd xmm0, xmm4 ; Floor vector
 	movupd xmm1, xmm3 ; Vector
-	dotGridGradient
+	dotGridGradient	  ; dotGridGradient(Floor vector, Vector)
 	movupd xmm8, xmm0 ; Save first part of gradient vector
 
-	movupd xmm0, xmm5 ; Cell vector
-	movsd xmm0, xmm4 ; Floor vector
-	movupd xmm1, xmm3 ; Vector
-	dotGridGradient
+	movupd xmm0, xmm5  ; Cell vector
+	movsd xmm0, xmm4   ; Floor vector
+	movupd xmm1, xmm3  ; Vector
+	dotGridGradient    ; dotGridGradient([Floor x, Cell y], Vector)
 	movlhps xmm8, xmm0 ; Save second part of gradient vector
 
 	movupd xmm0, xmm8
 	movsd xmm1, xmm6
-	lerp
+	lerp              ; lerp(Gradient vector, Difference of paramater x)
 	movupd xmm9, xmm0 ; Save first part of interpolation vector
 
 	movupd xmm0, xmm4 ; Floor vector
-	movsd xmm0, xmm5 ; Cell vector
+	movsd xmm0, xmm5  ; Cell vector
 	movupd xmm1, xmm3 ; Vector
-	dotGridGradient
+	dotGridGradient   ; dotGridGradient([Cell x, Floor y], Vector)
 	movupd xmm8, xmm0 ; Save first part of gradient vector
 
-	movupd xmm0, xmm5 ; Cell vector
-	movupd xmm1, xmm3 ; Vector
-	dotGridGradient
+	movupd xmm0, xmm5  ; Cell vector
+	movupd xmm1, xmm3  ; Vector
+	dotGridGradient    ; dotGridGradient(Cell vector, Vector)
 	movlhps xmm8, xmm0 ; Save second part of gradient vector
 
 	movupd xmm0, xmm8
 	movsd xmm1, xmm6
-	lerp
+	lerp               ; lerp(Gradient vector, Difference of paramater x)
 	movlhps xmm9, xmm0 ; Save second part of interpolation vector
 
 	movupd xmm0, xmm9
 	movhlps xmm1, xmm6
-	lerp
-	cvtsd2si rax, xmm4
-xor rax, rax
-mov rsp, rbp
-pop rbp
+	lerp               ; lerp(Gradient vector, Difference of paramater y)
 	ret
 perlinNoise ENDP
 END

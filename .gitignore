@@ -1,4 +1,3 @@
-*.dll
 .vs
 x64
 perlinNoise/x64
