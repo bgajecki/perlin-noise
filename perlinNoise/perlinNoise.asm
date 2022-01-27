@@ -4,6 +4,7 @@
 ; Optimization: never use memory, only registers and constants.
 ;
 ONE = 1
+THOUSAND = 1000
 
 ; Code segment
 .code
@@ -26,22 +27,38 @@ lerp MACRO
 ENDM
 
 ; /brief generateRandomDouble
-; /use RAX -> buffer register
+; /use RAX -> buffer 
+; /use XMM10[0...63]
+; /use XMM11[0...63]
 ; /return XMM0[0...127]
 ; /description  Generate random double number between 1 and 0.
 ; y = 1/sqrt(random_number)
-generateRandomDouble MACRO
-	rdrand rax
-	and rax, 7FFFFFFFh ; No numbers with sign
-	cvtsi2sd xmm0, rax
-	movlhps xmm1, xmm1
+generateRandomDouble PROC
+	mov rax, ONE 
+	cvtsi2sd xmm10, rax
+	mov rax, THOUSAND
+	cvtsi2sd xmm11, rax
+	
+	rdrand eax
+	and eax, 7FFFFh ; No numbers with sign
+	cvtsi2sd xmm0, eax
 
-	rdrand rax
-	and rax, 7FFFFFFFh ; No numbers with sign
-	cvtsi2sd xmm1, rax
+	DIVIDE_1:
+		divsd xmm0, xmm11
+		comisd xmm0, xmm10
+		ja DIVIDE_1
+	movlhps xmm0, xmm0
 
-	rsqrtps xmm1, xmm1
-ENDM
+	rdrand eax
+	and eax, 7FFFFh ; No numbers with sign
+	cvtsi2sd xmm0, eax
+
+	DIVIDE_2:
+		divsd xmm0, xmm11
+		comisd xmm0, xmm10
+		ja DIVIDE_1
+	ret
+generateRandomDouble ENDP
 
 ; /brief dotGridGradient
 ; /param ixiy:XMM0
@@ -50,7 +67,7 @@ ENDM
 ; /description 
 dotGridGradient MACRO
    	subpd xmm1, xmm0
-	generateRandomDouble
+	call generateRandomDouble
 	mulpd xmm0, xmm1
 	movhlps xmm1, xmm0
 	addsd xmm0, xmm1
@@ -68,7 +85,7 @@ ENDM
 ; /use XMM7[0..127] - Mix vector
 ; /use XMM8[0..127] - Gradient vector
 ; /use XMM9[0..127] - Interpolation vector
-perlinNoise PROC
+perlinNoise PROC EXPORT
 	; x -> xmm3[0...63]
 	; y -> xmm3[64...127]
 	movupd xmm3, xmm0
@@ -76,9 +93,9 @@ perlinNoise PROC
 
 	; Calc floor of vector
 	movupd xmm4, xmm3
-	cvtsd2si rax, xmm4
+	cvttsd2si rax, xmm4
 	movhlps xmm4, xmm4
-	cvtsd2si rdx, xmm4
+	cvttsd2si rdx, xmm4
 
 	cvtsi2sd xmm4, rdx
 	movlhps xmm4, xmm4
@@ -98,7 +115,7 @@ perlinNoise PROC
 
 	movupd xmm0, xmm4 ; Floor vector
 	movupd xmm1, xmm3 ; Vector
-	dotGridGradient	  ; dotGridGradient(Floor vector, Vector)
+	dotGridGradient 	  ; dotGridGradient(Floor vector, Vector)
 	movupd xmm8, xmm0 ; Save first part of gradient vector
 
 	movupd xmm0, xmm5  ; Cell vector
@@ -115,12 +132,12 @@ perlinNoise PROC
 	movupd xmm0, xmm4 ; Floor vector
 	movsd xmm0, xmm5  ; Cell vector
 	movupd xmm1, xmm3 ; Vector
-	dotGridGradient   ; dotGridGradient([Cell x, Floor y], Vector)
+	dotGridGradient    ; dotGridGradient([Cell x, Floor y], Vector)
 	movupd xmm8, xmm0 ; Save first part of gradient vector
 
 	movupd xmm0, xmm5  ; Cell vector
 	movupd xmm1, xmm3  ; Vector
-	dotGridGradient    ; dotGridGradient(Cell vector, Vector)
+	dotGridGradient     ; dotGridGradient(Cell vector, Vector)
 	movlhps xmm8, xmm0 ; Save second part of gradient vector
 
 	movupd xmm0, xmm8
@@ -130,7 +147,7 @@ perlinNoise PROC
 
 	movupd xmm0, xmm9
 	movhlps xmm1, xmm6
-	lerp               ; lerp(Gradient vector, Difference of paramater y)
+	lerp               ; lerp(Interpolation vector, Difference of paramater y)
 	ret
 perlinNoise ENDP
 END
